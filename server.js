@@ -1,6 +1,6 @@
 const express = require("express");
 const cors = require("cors");
-const ytdlp = require("yt-dlp-exec");
+const { execFile } = require("child_process");
 
 const app = express();
 app.use(cors());
@@ -16,16 +16,20 @@ function isValidURL(url) {
     }
 }
 
-// Jalankan yt-dlp
+// Jalankan yt-dlp native binary
 function runYtDlp(url) {
-    return ytdlp(url, {
-        dumpSingleJson: true,
-        noWarnings: true,
-        noCheckCertificates: true,
-        preferFreeFormats: true
+    return new Promise((resolve, reject) => {
+        execFile("yt-dlp", ["-j", url], { maxBuffer: 200 * 1024 * 1024 }, (err, stdout, stderr) => {
+            if (err) return reject(stderr || err);
+
+            try {
+                resolve(JSON.parse(stdout));
+            } catch (e) {
+                reject("Gagal parsing JSON yt-dlp: " + e.toString());
+            }
+        });
     });
 }
-
 
 // Endpoint API
 app.post("/api/download", async (req, res) => {
@@ -38,7 +42,7 @@ app.post("/api/download", async (req, res) => {
     try {
         const data = await runYtDlp(url);
 
-        // CASE 1: CAROUSEL (ada entries)
+        // CASE 1: CAROUSEL
         if (Array.isArray(data.entries)) {
             const items = [];
 
@@ -53,7 +57,10 @@ app.post("/api/download", async (req, res) => {
 
                 // Video
                 else if (entry.formats) {
-                    const vid = entry.formats.reverse().find(f => f.url && f.ext === "mp4");
+                    const vid = entry.formats
+                        .filter(f => f.ext === "mp4" && f.acodec !== "none" && f.vcodec !== "none")
+                        .sort((a, b) => (b.height || 0) - (a.height || 0))[0];
+
                     if (vid) {
                         items.push({
                             url: vid.url,
@@ -83,14 +90,14 @@ app.post("/api/download", async (req, res) => {
             });
         }
 
-        // CASE 3: VIDEO (Reels, IGTV, Story)
+        // CASE 3: VIDEO (Reels, Story, IGTV)
         if (data.formats) {
             const video = data.formats
                 .filter(f => f.ext === "mp4" && f.acodec !== "none" && f.vcodec !== "none")
                 .sort((a, b) => (b.height || 0) - (a.height || 0))[0];
 
             if (!video) {
-                return res.status(500).json({ error: "Tidak ada format video dengan audio" });
+                return res.status(500).json({ error: "Format video tanpa audio, yt-dlp gagal menemukan audio" });
             }
 
             return res.json({
@@ -103,8 +110,7 @@ app.post("/api/download", async (req, res) => {
             });
         }
 
-
-        return res.status(500).json({ error: "Jenis konten tidak dikenal" });
+        return res.status(500).json({ error: "Jenis konten tidak dikenali" });
 
     } catch (e) {
         return res.status(500).json({ error: e.toString() });
