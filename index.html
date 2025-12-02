@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>IG Downloader</title>
+
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #0f0f0f;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .card {
+            background: #1a1a1a;
+            padding: 30px;
+            width: 400px;
+            border-radius: 15px;
+            box-shadow: 0 0 20px rgba(255,255,255,0.05);
+            text-align: center;
+        }
+
+        input {
+            width: 90%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border-radius: 8px;
+            border: none;
+            font-size: 15px;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            background: #4CAF50;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #45a043;
+        }
+
+        .result-box {
+            margin-top: 20px;
+        }
+
+        img {
+            width: 100%;
+            border-radius: 10px;
+            margin-bottom: 10px;
+        }
+
+        .loader {
+            border: 6px solid #ddd;
+            border-top: 6px solid #4CAF50;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            margin: 20px auto;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+
+<body>
+<div class="card">
+    <h2>Instagram Downloader</h2>
+
+    <input id="url" placeholder="Tempel link IG disini...">
+    <button onclick="download()">Download</button>
+
+    <div id="loader" style="display:none;" class="loader"></div>
+    <div id="result" class="result-box"></div>
+</div>
+
+<script>
+async function download() {
+    const url = document.getElementById("url").value;
+    const result = document.getElementById("result");
+    const loader = document.getElementById("loader");
+
+    result.innerHTML = "";
+    loader.style.display = "block";
+
+    try {
+        const response = await fetch("http://localhost:3000/api/download", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url })
+        });
+
+        const data = await response.json();
+        loader.style.display = "none";
+
+        if (data.error) {
+            result.innerHTML = "<p>" + data.error + "</p>";
+            return;
+        }
+
+        // Tampilkan thumbnail utama & title
+        let html = `
+            <img src="${data.thumbnail}" style="border-radius:10px;">
+            <h3>${data.title}</h3>
+        `;
+
+        // Jika konten hanya satu item
+        if (data.items.length === 1) {
+            const item = data.items[0];
+
+            if (item.type === "photo") {
+                html += `
+                    <img src="${item.url}" style="margin-top:10px;">
+                    <br>
+                    <a href="${item.url}" download style="
+                        color:white;
+                        background:#4CAF50;
+                        padding:10px 20px;
+                        border-radius:10px;
+                        text-decoration:none;
+                    ">Download Foto</a>
+                `;
+            }
+
+            if (item.type === "video") {
+                html += `
+                    <video controls style="width:100%;margin-top:10px;border-radius:10px;">
+                        <source src="${item.url}" type="video/mp4">
+                    </video>
+                    <br>
+                    <a href="${item.url}" download style="
+                        color:white;
+                        background:#4CAF50;
+                        padding:10px 20px;
+                        border-radius:10px;
+                        text-decoration:none;
+                    ">Download Video</a>
+                `;
+            }
+        }
+
+        // Jika konten carousel (lebih dari 1)
+        if (data.items.length > 1) {
+            html += `<h3>Carousel (${data.items.length} item)</h3>`;
+
+            html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-top:15px;">`;
+
+            data.items.forEach((item, i) => {
+                if (item.type === "photo") {
+                    html += `
+                        <div style="background:#222;padding:10px;border-radius:10px;text-align:center;">
+                            <img src="${item.url}" style="width:100%;border-radius:8px;">
+                            <a href="${item.url}" download style="
+                                display:inline-block;
+                                margin-top:8px;
+                                color:white;
+                                background:#4CAF50;
+                                padding:6px 10px;
+                                border-radius:8px;
+                                text-decoration:none;
+                                font-size:13px;
+                            ">Download Foto ${i+1}</a>
+                        </div>
+                    `;
+                }
+
+                if (item.type === "video") {
+                    html += `
+                        <div style="background:#222;padding:10px;border-radius:10px;text-align:center;">
+                            <video controls style="width:100%;border-radius:8px;">
+                                <source src="${item.url}" type="video/mp4">
+                            </video>
+                            <a href="${item.url}" download style="
+                                display:inline-block;
+                                margin-top:8px;
+                                color:white;
+                                background:#4CAF50;
+                                padding:6px 10px;
+                                border-radius:8px;
+                                text-decoration:none;
+                                font-size:13px;
+                            ">Download Video ${i+1}</a>
+                        </div>
+                    `;
+                }
+            });
+
+            html += `</div>`;
+        }
+
+        result.innerHTML = html;
+
+    } catch (err) {
+        loader.style.display = "none";
+        result.innerHTML = "<p>Gagal mengambil data dari server.</p>";
+    }
+}
+</script>
+
+
+</body>
+</html>
